@@ -37,8 +37,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ reply: "Chave GEMINI_API_KEY não configurada na Vercel." });
     }
 
-    // Usando gemini-2.5-flash confirmado na sua lista!
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Usando gemini-flash-latest (o alias oficial que nunca expira)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
     const geminiRes = await fetch(url, {
       method: "POST",
@@ -60,7 +60,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ reply: "Erro: " + (data.error?.message || "Instabilidade na IA") });
     }
 
-    // Pega o texto da resposta (ignora partes de pensamento se houver)
     const parts = data.candidates?.[0]?.content?.parts || [];
     const textPart = parts.find(p => p.text && !p.thought) || parts[0];
     const reply = textPart?.text || "Como posso te ajudar no seu treino mental hoje?";
