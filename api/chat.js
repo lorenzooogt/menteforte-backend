@@ -37,34 +37,53 @@ export default async function handler(req, res) {
       return res.status(500).json({ reply: "Chave GEMINI_API_KEY não configurada na Vercel." });
     }
 
-    // Usando gemini-flash-latest (o alias oficial que nunca expira)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // Modelos leves da sua lista (sem fila/alta demanda)
+    const modelosParaTentar = [
+      "gemini-2.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-latest"
+    ];
 
-    const geminiRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
+    let respostaTexto = null;
+
+    for (const mod of modelosParaTentar) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
+              }
+            ]
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.candidates?.[0]?.content?.parts) {
+          const parts = data.candidates[0].content.parts;
+          const textPart = parts.find(p => p.text && !p.thought) || parts[0];
+          if (textPart?.text) {
+            respostaTexto = textPart.text;
+            break; // Sucesso! Sai do loop
           }
-        ]
-      })
-    });
-
-    const data = await geminiRes.json();
-
-    if (!geminiRes.ok) {
-      console.error("Erro Gemini:", data);
-      return res.status(500).json({ reply: "Erro: " + (data.error?.message || "Instabilidade na IA") });
+        }
+      } catch (e) {
+        // Se um der erro de demanda, tenta o próximo da lista
+      }
     }
 
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    const textPart = parts.find(p => p.text && !p.thought) || parts[0];
-    const reply = textPart?.text || "Como posso te ajudar no seu treino mental hoje?";
+    if (respostaTexto) {
+      return res.status(200).json({ reply: respostaTexto });
+    }
 
-    return res.status(200).json({ reply });
+    return res.status(200).json({ 
+      reply: "Olá! No momento os servidores estão com bastante movimento, mas estou aqui com você! Respire fundo e tente mandar sua mensagem novamente em alguns instantes. 💪" 
+    });
 
   } catch (err) {
     console.error("Erro interno:", err);
