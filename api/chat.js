@@ -1,4 +1,4 @@
-const INSTRUCOES_DO_AGENTE = `Você é o "MenteForte", um assistente virtual acolhedor de psicologia esportiva para jovens atletas de base (12 a 25 anos).
+const INSTRUCOES_DO_AGENTE = `Você é o "MenteForte", assistente virtual de psicologia esportiva para jovens atletas de base (12 a 25 anos).
 Você atua em 4 frentes:
 1. Ansiedade pré-competição (técnicas de respiração, visualização, controle de nervosismo e medo de errar).
 2. Frustração pós-derrota (processar resultados, extrair aprendizados, separar identidade esportiva do resultado).
@@ -6,10 +6,10 @@ Você atua em 4 frentes:
 4. Pressão externa (cobranças familiares, treinadores, expectativas e prevenção de burnout).
 
 Regras obrigatórias:
-- Seja sempre empático, acessível e encorajador.
-- Dê respostas objetivas (máximo 3 parágrafos curtos).
+- Seja sempre acolhedor, empático e encorajador.
+- Dê respostas objetivas em no máximo 3 parágrafos curtos.
 - NUNCA dê diagnósticos médicos nem receitas.
-- Em casos de crise extrema (automutilação, ideação suicida, desespero grave), encaminhe imediatamente para o CVV 188 ou serviços de emergência (192 SAMU).`;
+- Em casos de crise extrema (automutilação, ideação suicida), encaminhe para o CVV 188 ou SAMU 192.`;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -34,60 +34,38 @@ export default async function handler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ reply: "Erro: Chave GEMINI_API_KEY não encontrada." });
+      return res.status(500).json({ reply: "Chave GEMINI_API_KEY não configurada na Vercel." });
     }
 
-    // Lista de modelos suportados para tentar em ordem
-    const modelos = [
-      "gemini-2.5-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-pro",
-      "gemini-pro"
-    ];
+    // Usando gemini-2.5-flash confirmado na sua lista!
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    let respostaTexto = null;
-    let ultimoErro = null;
-
-    for (const mod of modelos) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${apiKey}`;
-        const r = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 600
-            }
-          })
-        });
-
-        const d = await r.json();
-        if (r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text) {
-          respostaTexto = d.candidates[0].content.parts[0].text;
-          break; // Conseguiu com sucesso!
-        } else {
-          ultimoErro = d;
-        }
-      } catch (e) {
-        ultimoErro = e;
-      }
-    }
-
-    if (respostaTexto) {
-      return res.status(200).json({ reply: respostaTexto });
-    }
-
-    console.error("Erros dos modelos:", JSON.stringify(ultimoErro));
-    return res.status(500).json({ 
-      reply: "Instabilidade temporária na IA: " + (ultimoErro?.error?.message || "Tente novamente") 
+    const geminiRes = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
+          }
+        ]
+      })
     });
+
+    const data = await geminiRes.json();
+
+    if (!geminiRes.ok) {
+      console.error("Erro Gemini:", data);
+      return res.status(500).json({ reply: "Erro: " + (data.error?.message || "Instabilidade na IA") });
+    }
+
+    // Pega o texto da resposta (ignora partes de pensamento se houver)
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const textPart = parts.find(p => p.text && !p.thought) || parts[0];
+    const reply = textPart?.text || "Como posso te ajudar no seu treino mental hoje?";
+
+    return res.status(200).json({ reply });
 
   } catch (err) {
     console.error("Erro interno:", err);
