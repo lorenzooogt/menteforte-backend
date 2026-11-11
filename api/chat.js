@@ -34,42 +34,61 @@ export default async function handler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ reply: "Erro: Chave GEMINI_API_KEY não configurada." });
+      return res.status(500).json({ reply: "Erro: Chave GEMINI_API_KEY não encontrada." });
     }
 
-    // Endpoint v1 oficial com gemini-2.5-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Lista de modelos suportados para tentar em ordem
+    const modelos = [
+      "gemini-2.5-flash",
+      "gemini-1.5-flash-latest",
+      "gemini-1.5-pro",
+      "gemini-pro"
+    ];
 
-    const geminiRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: INSTRUCOES_DO_AGENTE }]
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: message }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 600
+    let respostaTexto = null;
+    let ultimoErro = null;
+
+    for (const mod of modelos) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${apiKey}`;
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 600
+            }
+          })
+        });
+
+        const d = await r.json();
+        if (r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text) {
+          respostaTexto = d.candidates[0].content.parts[0].text;
+          break; // Conseguiu com sucesso!
+        } else {
+          ultimoErro = d;
         }
-      })
+      } catch (e) {
+        ultimoErro = e;
+      }
+    }
+
+    if (respostaTexto) {
+      return res.status(200).json({ reply: respostaTexto });
+    }
+
+    console.error("Erros dos modelos:", JSON.stringify(ultimoErro));
+    return res.status(500).json({ 
+      reply: "Instabilidade temporária na IA: " + (ultimoErro?.error?.message || "Tente novamente") 
     });
 
-    const data = await geminiRes.json();
-
-    if (!geminiRes.ok) {
-      console.error("Erro Gemini:", data);
-      return res.status(500).json({ reply: "Erro da IA: " + (data.error?.message || "Instabilidade temporária.") });
-    }
-
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Como posso te ajudar no seu treino mental hoje?";
-
-    return res.status(200).json({ reply });
   } catch (err) {
     console.error("Erro interno:", err);
     return res.status(500).json({ reply: "Erro interno. Tente novamente!" });
