@@ -1,15 +1,18 @@
-const INSTRUCOES_DO_AGENTE = `Você é o "MenteForte", assistente virtual de psicologia esportiva para jovens atletas de base (12 a 25 anos).
-Você atua em 4 frentes:
-1. Ansiedade pré-competição (técnicas de respiração, visualização, controle de nervosismo e medo de errar).
-2. Frustração pós-derrota (processar resultados, extrair aprendizados, separar identidade esportiva do resultado).
-3. Confiança e concentração (foco, rotinas pré-jogo, autoconfiança, recuperação após falhas).
-4. Pressão externa (cobranças familiares, treinadores, expectativas e prevenção de burnout).
+const PERSONALIDADE_MENTEFORTE = `Você é o "MenteForte", um psicólogo esportivo e mentor amigo dedicado a atletas de base (jovens que treinam e competem).
 
-Regras obrigatórias:
-- Seja sempre acolhedor, empático e encorajador.
-- Dê respostas objetivas em no máximo 3 parágrafos curtos.
-- NUNCA dê diagnósticos médicos nem receitas.
-- Em casos de crise extrema (automutilação, ideação suicida), encaminhe para o CVV 188 ou SAMU 192.`;
+COMO VOCÊ SE COMPORTA:
+- Converse de forma natural, calorosa, empática e acolhedora, como um profissional experiente e parceiro que realmente se importa com o atleta.
+- Ouça ativamente: se o atleta disser algo como "oi, hoje não estou muito bem", "estou triste", "não sei o que fazer", acolha esse sentimento primeiro antes de querer dar conselhos ou listas prontas.
+- Faça perguntas abertas e gentis para entender o que está acontecendo (ex: "Sinto muito que você esteja se sentindo assim hoje. Quer me contar um pouco do que aconteceu no treino ou na sua rotina? Estou aqui para te ouvir.").
+- Use uma linguagem jovem, leve e acessível, sem ser formal demais e sem infantilizar.
+- Entenda profundamente o universo esportivo: as dores da rotina pesada de treinos, conciliar escola/estudos com esporte, expectativas, frustrações, lesões e relação com técnicos e família.
+- Quando fizer sentido, traga reflexões práticas, exercícios rápidos de respiração ou foco mental, mas sempre no fluxo orgânico de um diálogo real, parágrafo por parágrafo.
+- Nunca dê respostas gigantescas em formato de enciclopédia. Mantenha as mensagens em tamanho de conversa humana real (1 a 3 parágrafos).
+
+LIMITES ÉTICOS:
+- Você é uma IA de apoio e orientação esportiva, não substitui acompanhamento médico/clínico formal.
+- NUNCA dê diagnósticos clínicos nem receitas.
+- Em casos de desespero extremo, automutilação ou ideação suicida, acolha com carinho e encaminhe para o CVV (ligue 188) e recomende buscar um adulto de confiança ou suporte profissional imediatamente.`;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -21,72 +24,70 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(200).json({ status: "Backend MenteForte ativo!" });
+    return res.status(200).json({ status: "MenteForte pronto!" });
   }
 
   try {
-    const { message } = req.body || {};
+    const { message, history } = req.body || {};
 
     if (!message) {
-      return res.status(400).json({ reply: "Por favor, digite uma mensagem." });
+      return res.status(400).json({ reply: "Pode me contar, estou te ouvindo." });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-
     if (!apiKey) {
-      return res.status(500).json({ reply: "Chave GEMINI_API_KEY não configurada na Vercel." });
+      return res.status(500).json({ reply: "Chave não configurada." });
     }
 
-    // Modelos leves da sua lista (sem fila/alta demanda)
-    const modelosParaTentar = [
-      "gemini-2.5-flash-lite",
-      "gemini-3.1-flash-lite",
-      "gemini-flash-latest"
-    ];
+    // Monta o histórico de conversa para ele lembrar do que foi dito antes
+    let contents = [];
 
-    let respostaTexto = null;
+    if (Array.isArray(history) && history.length > 0) {
+      // Pega as últimas mensagens para manter o contexto da conversa
+      contents = history.slice(-8).map(msg => ({
+        role: msg.sender === "user" ? "user" : "model",
+        parts: [{ text: msg.text }]
+      }));
+    }
 
-    for (const mod of modelosParaTentar) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${INSTRUCOES_DO_AGENTE}\n\nMensagem do atleta: ${message}` }]
-              }
-            ]
-          })
-        });
+    // Adiciona a mensagem atual do atleta
+    contents.push({
+      role: "user",
+      parts: [{ text: message }]
+    });
 
-        const data = await response.json();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
 
-        if (response.ok && data.candidates?.[0]?.content?.parts) {
-          const parts = data.candidates[0].content.parts;
-          const textPart = parts.find(p => p.text && !p.thought) || parts[0];
-          if (textPart?.text) {
-            respostaTexto = textPart.text;
-            break; // Sucesso! Sai do loop
-          }
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: PERSONALIDADE_MENTEFORTE }]
+        },
+        contents: contents,
+        generationConfig: {
+          temperature: 0.8, // Mais criativo, natural e empático
+          maxOutputTokens: 500
         }
-      } catch (e) {
-        // Se um der erro de demanda, tenta o próximo da lista
-      }
+      })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.candidates?.[0]?.content?.parts) {
+      const parts = data.candidates[0].content.parts;
+      const textPart = parts.find(p => p.text && !p.thought) || parts[0];
+      return res.status(200).json({ reply: textPart?.text || "Estou aqui com você. Pode me contar mais." });
     }
 
-    if (respostaTexto) {
-      return res.status(200).json({ reply: respostaTexto });
-    }
-
+    // Fallback se o lite der pico
     return res.status(200).json({ 
-      reply: "Olá! No momento os servidores estão com bastante movimento, mas estou aqui com você! Respire fundo e tente mandar sua mensagem novamente em alguns instantes. 💪" 
+      reply: "Te ouvi, mas tive um pequeno tropeço na conexão. Pode me repetir o que disse? Quero muito te ajudar com isso." 
     });
 
   } catch (err) {
     console.error("Erro interno:", err);
-    return res.status(500).json({ reply: "Erro interno. Tente novamente!" });
+    return res.status(500).json({ reply: "Tive um erro técnico passageiro, mas já estou de volta! Pode mandar de novo?" });
   }
 }
