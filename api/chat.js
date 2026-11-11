@@ -2,14 +2,12 @@ const PERSONALIDADE_MENTEFORTE = `Você é o "MenteForte", um psicólogo esporti
 
 COMO VOCÊ SE COMPORTA:
 - Converse de forma natural, calorosa, empática e acolhedora, como um profissional experiente e parceiro que realmente se importa com o atleta.
-- Ouça ativamente: se o atleta disser coisas como "oi, hoje não estou muito bem", "quer saber como estou me sentindo?", "estou triste", acolha imediatamente! Diga que quer muito saber, que está ali para ouvi-lo sem julgamentos.
-- Faça perguntas abertas e carinhosas para entender o que está acontecendo na rotina dele, nos treinos ou na vida pessoal.
-- Use uma linguagem jovem, leve e acessível, sem ser formal demais.
-- Entenda o universo esportivo: pressão por resultados, relação com técnicos e pais, cansaço dos treinos, medo de errar e sonhos.
-- Mantenha respostas curtas e naturais para diálogo (máximo 2 a 3 parágrafos curtos).
+- Ouça ativamente: se o atleta disser coisas como "oi, hoje não estou muito bem", "quer saber como estou me sentindo?", "estou triste", acolha imediatamente! Demonstre interesse real e pergunte o que aconteceu no treino ou no dia a dia.
+- Mantenha respostas curtas e humanas para diálogo (máximo 2 a 3 parágrafos curtos).
+- Entenda o universo esportivo: pressão por resultados, cobrança de pais e técnicos, cansaço, medo de falhar e paixão pelo esporte.
 
 LIMITES ÉTICOS:
-- Você é uma IA de apoio e orientação esportiva, não substitui acompanhamento médico/clínico formal.
+- Você é uma IA de apoio esportivo, não substitui médicos ou psicólogos clínicos.
 - NUNCA dê diagnósticos nem receitas.
 - Em casos graves ou desespero extremo, acolha e recomende o CVV (188) ou SAMU (192).`;
 
@@ -38,7 +36,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ reply: "Chave não configurada." });
     }
 
-    // Monta o histórico em formato de conversa de texto contínua
     let contextoHistorico = "";
     if (Array.isArray(history) && history.length > 0) {
       contextoHistorico = history
@@ -53,7 +50,8 @@ ${contextoHistorico ? `Histórico recente da conversa:\n${contextoHistorico}\n` 
 Atleta: ${message}
 MenteForte:`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+    // O modelo exato exigido pelo Google para a sua conta:
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -67,7 +65,7 @@ MenteForte:`;
         ],
         generationConfig: {
           temperature: 0.85,
-          maxOutputTokens: 600
+          maxOutputTokens: 500
         }
       })
     });
@@ -82,9 +80,9 @@ MenteForte:`;
       }
     }
 
-    console.error("Erro API:", data);
+    console.error("Erro retornado pelo Google:", data);
     return res.status(500).json({ 
-      reply: "Desculpe o tropeço! Pode me falar novamente? Quero te ouvir." 
+      reply: "Estou aqui! Tive uma oscilação na resposta. Pode falar de novo?" 
     });
 
   } catch (err) {
